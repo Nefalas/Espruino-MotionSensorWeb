@@ -92,7 +92,7 @@ function setTime() {
     console.log("Fetching date");
     console.log("==================");
     date = Date.parse(res.headers.Date);
-    clk.setClock(date + 7200000);
+    clk.setClock(date + 7200000); //Date + 2 hours
     motionTriggerActive = true;
   });
 }
