@@ -1,23 +1,51 @@
 // ### Variables ###
 
-var motionSensorPin = A6;
-var ledPin          = A5;
+var motionSensorPin     = A6;
+var ledPin              = A5;
 
-var active          = false;
+var motion              = false;
+var motionTriggerActive = false;
 
-var ssid = "evothings-airport";
-var pass = "evothings";
+var ssid                = "evothings-airport";
+var pass                = "evothings";
 
 var date;
-var Clock = require("clock").Clock;
-var clk = new Clock();
+var Clock               = require("clock").Clock;
+var clk                 = new Clock();
+
+var htmlResponse        = "";
+
+var motion1             = "";
+var motion2             = "";
+var motion3             = "";
 
 
 // ### Functions ###
 
+function setupServer() {
+  var http = require("http");
+  var httpServer = http.createServer(function(request, response) {
+    console.log("==================");
+    console.log("Received request");
+    console.log(request);
+    console.log("==================");
+    if (request.url == "/favicon.ico") {
+      response.writeHead(404);
+      response.end("");
+      return;
+    }
+    response.write("<html><body>");
+    response.write(htmlResponse);
+    response.end("</body></html>");
+  });
+  httpServer.listen(80);
+  console.log("Server online");
+}
+
 function connectToWifi() {
   digitalWrite(B9, true);
   Serial2.setup(9600, {rx: A3, tx: A2});
+  console.log("==================");
   console.log("Connecting to WiFi");
   var wifi = require("ESP8266WiFi").connect(Serial2, function(err) {
     if (err) throw err;
@@ -27,42 +55,62 @@ function connectToWifi() {
         if (err) throw err;
         wifi.getIP(function(err, ip) {
           console.log("Connected to Wifi: " + ssid + " with IP: " + ip);
+          setupServer();
+          setTime();
+          setInterval(setTime, 60000 * 5);
         });
-        getTime();
       });
     });
   });
 }
 
-function getTime() {
-  require("http").get("http://www.timeapi.org/utc/now", function(res) {
-          clk.setClock(Date.parse(res.headers.Date) + 7200000);
-  });
+function saveMotion(motion) {
+  motion3 = motion2;
+  motion2 = motion1;
+  motion1 = motion;
+  htmlResponse = motion1 + "<br/>" + motion2 + "<br/>" + motion3;
 }
 
 function motionDetected() {
-  console.log("Motion detected on " + clk.getDate().toString());
+  var d = clk.getDate().toString().replace(" GMT+0000", "");
+  console.log("==================");
+  var motion = "Motion detected on " + d;
+  saveMotion(motion);
+  console.log(motion);
   console.log("Turning on LED");
   digitalWrite(ledPin, true);
 }
 
 function motionEnd() {
   console.log("Turning off LED");
+  console.log("==================");
   digitalWrite(ledPin, false);
+}
+
+function setTime() {
+  require("http").get("http://www.timeapi.org/utc/now", function(res) {
+    console.log("Fetching date");
+    console.log("==================");
+    date = Date.parse(res.headers.Date);
+    clk.setClock(date + 7200000);
+    motionTriggerActive = true;
+  });
 }
 
 
 // ### Code ###
 
-E.on('init', connectToWifi);
+E.on('init', function() {
+  connectToWifi();
+});
 
 setWatch(function() {
-  if (!active) {
-    active = true;
+  if (motionTriggerActive) {
+    motion = true;
     motionDetected();
     setTimeout(function() {
       motionEnd();
-      active = false;
+      active = motion;
     }, 2000);
   }
 }, motionSensorPin, {repeat: true, edge: "rising"});
